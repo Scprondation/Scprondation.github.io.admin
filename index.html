@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="style.css">  <!-- Путь к вашему CSS-файлу -->
+
 </head>
 <body>
     <div class="container">
@@ -14,7 +15,8 @@
             <h1>Модератор чатов Telegram</h1>
             <div class="menu">
                 <button id="addBotBtn">Добавить бота</button>
-                <button id="manageBtn">Управление</button>
+                <button id="manageBtn">Управление чатами</button>
+                <button id="settingsBtn">Настройки</button>
             </div>
             <div id="statusMessage" class="status"></div>
         </div>
@@ -185,39 +187,90 @@
             </div>
             <button id="createInviteBtn">Создать новую ссылку</button>
         </div>
+
+        <!-- Настройки бота -->
+        <div id="settingsMenu" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showMainMenu()">← Назад</button>
+            <h2>Настройки бота</h2>
+            <div class="form-group">
+                <label for="autoDeleteSpam">Автоудаление спама:</label>
+                <select id="autoDeleteSpam">
+                    <option value="0">Отключено</option>
+                    <option value="1" selected>Включено</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="warnBeforeBan">Предупреждения перед баном:</label>
+                <input type="number" id="warnBeforeBan" min="0" max="10" value="3">
+            </div>
+            <div class="form-group">
+                <label for="language">Язык интерфейса:</label>
+                <select id="language">
+                    <option value="ru" selected>Русский</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+            <button id="saveSettingsBtn">Сохранить настройки</button>
+        </div>
     </div>
 
     <script>
         // Инициализация Telegram WebApp
         const tg = window.Telegram.WebApp;
-        tg.expand();
         
-        // ID вашего бота (замените на реальный)
-        const BOT_USERNAME = 'Groupadminscprondation_bot';
+        // Инициализация приложения
+        tg.expand();
+        tg.enableClosingConfirmation();
+        tg.MainButton.setText("Готово").hide();
         
         // Текущий выбранный чат
         let currentChat = null;
         
-        // Заглушка для данных (в реальном приложении нужно получать с сервера)
-        const mockChats = [
-            { id: -100123456789, title: "Моя тестовая группа", type: "group", is_admin: true },
-            { id: -100987654321, title: "Мой тестовый канал", type: "channel", is_admin: true }
-        ];
+        // Данные приложения (в реальном приложении нужно сохранять в localStorage)
+        let appData = {
+            settings: {
+                autoDeleteSpam: true,
+                warnBeforeBan: 3,
+                language: 'ru'
+            },
+            // Заглушка для данных чатов
+            chats: [
+                { 
+                    id: -100123456789, 
+                    title: "Моя тестовая группа", 
+                    type: "group", 
+                    is_admin: true,
+                    description: "Тестовая группа для модерации",
+                    members: [
+                        { id: 123456789, username: "user1", is_admin: false },
+                        { id: 987654321, username: "user2", is_admin: true }
+                    ],
+                    invites: [
+                        { link: "https://t.me/joinchat/ABC123", expire_date: "2023-12-31", usage_limit: 10, usage_count: 3 }
+                    ],
+                    permissions: {
+                        change_info: true,
+                        post_messages: true,
+                        edit_messages: true,
+                        delete_messages: true,
+                        invite_users: true,
+                        restrict_members: true,
+                        pin_messages: true,
+                        promote_admins: true
+                    }
+                }
+            ]
+        };
         
-        const mockMembers = [
-            { id: 123456789, username: "user1", is_admin: false },
-            { id: 987654321, username: "user2", is_admin: true }
-        ];
-        
-        const mockInvites = [
-            { link: "https://t.me/joinchat/ABC123", expire_date: "2023-12-31", usage_limit: 10, usage_count: 3 }
-        ];
-        
-        // Инициализация элементов
+        // Инициализация элементов при загрузке
         document.addEventListener('DOMContentLoaded', function() {
+            // Загружаем настройки
+            loadSettings();
+            
             // Главное меню
             document.getElementById('addBotBtn').addEventListener('click', showAddBotMenu);
             document.getElementById('manageBtn').addEventListener('click', showManageMenu);
+            document.getElementById('settingsBtn').addEventListener('click', showSettingsMenu);
             
             // Меню добавления бота
             document.getElementById('addToGroupBtn').addEventListener('click', () => addBotToChat('group'));
@@ -238,6 +291,18 @@
             document.getElementById('addAdminBtn').addEventListener('click', addAdmin);
             document.getElementById('savePermissionsBtn').addEventListener('click', savePermissions);
             document.getElementById('createInviteBtn').addEventListener('click', createInvite);
+            document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+            
+            // Если открыто из чата, попробуем получить информацию о чате
+            if (tg.initDataUnsafe.chat) {
+                currentChat = {
+                    id: tg.initDataUnsafe.chat.id,
+                    title: tg.initDataUnsafe.chat.title,
+                    type: tg.initDataUnsafe.chat.type,
+                    is_admin: true
+                };
+                showChatManagement();
+            }
         });
         
         // Функции навигации
@@ -272,8 +337,7 @@
         function showEditDescriptionForm() {
             hideAllSections();
             document.getElementById('editDescriptionForm').classList.remove('hidden');
-            // В реальном приложении нужно загрузить текущее описание
-            document.getElementById('newDescription').value = "Текущее описание чата";
+            document.getElementById('newDescription').value = currentChat.description || "";
         }
         
         function showManageMembersForm() {
@@ -291,12 +355,33 @@
         function showManagePermissionsForm() {
             hideAllSections();
             document.getElementById('managePermissionsForm').classList.remove('hidden');
+            
+            // Загружаем текущие разрешения
+            const perms = currentChat.permissions || {};
+            document.getElementById('permChangeInfo').checked = perms.change_info !== false;
+            document.getElementById('permPostMessages').checked = perms.post_messages !== false;
+            document.getElementById('permEditMessages').checked = perms.edit_messages !== false;
+            document.getElementById('permDeleteMessages').checked = perms.delete_messages !== false;
+            document.getElementById('permInviteUsers').checked = perms.invite_users !== false;
+            document.getElementById('permRestrictMembers').checked = perms.restrict_members !== false;
+            document.getElementById('permPinMessages').checked = perms.pin_messages !== false;
+            document.getElementById('permPromoteAdmins').checked = perms.promote_admins !== false;
         }
         
         function showManageInvitesForm() {
             hideAllSections();
             document.getElementById('manageInvitesForm').classList.remove('hidden');
             loadInvitesList();
+        }
+        
+        function showSettingsMenu() {
+            hideAllSections();
+            document.getElementById('settingsMenu').classList.remove('hidden');
+            
+            // Загружаем текущие настройки
+            document.getElementById('autoDeleteSpam').value = appData.settings.autoDeleteSpam ? "1" : "0";
+            document.getElementById('warnBeforeBan').value = appData.settings.warnBeforeBan;
+            document.getElementById('language').value = appData.settings.language;
         }
         
         function hideAllSections() {
@@ -314,12 +399,13 @@
             statusElement.style.display = 'none';
             
             if (tg.platform !== 'unknown') {
-                tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?startgroup=true`);
+                // В реальном приложении нужно использовать username вашего бота
+                tg.openTelegramLink(`https://t.me/${tg.initDataUnsafe.user?.username || 'your_bot'}?startgroup=true`);
                 
                 showStatusMessage(`Бот был предложен для добавления в ${chatType === 'group' ? 'группу' : 'канал'}. Пожалуйста, завершите добавление в интерфейсе Telegram.`, 'success');
             } else {
                 showStatusMessage('Это приложение должно быть открыто в Telegram для работы этой функции.', 'error');
-                window.open(`https://t.me/${BOT_USERNAME}?startgroup=true`, '_blank');
+                window.open(`https://t.me/${tg.initDataUnsafe.user?.username || 'your_bot'}?startgroup=true`, '_blank');
             }
         }
         
@@ -327,14 +413,15 @@
             const chatListElement = document.getElementById('chatList');
             chatListElement.innerHTML = '';
             
-            // В реальном приложении нужно запрашивать список чатов с сервера
-            mockChats.forEach(chat => {
+            appData.chats.forEach(chat => {
                 if (chat.is_admin) {
                     const chatElement = document.createElement('div');
                     chatElement.className = 'chat-item';
                     chatElement.innerHTML = `
-                        <div class="chat-title">${chat.title}</div>
-                        <div class="chat-type">${chat.type === 'group' ? 'Группа' : 'Канал'}</div>
+                        <div>
+                            <div class="chat-title">${chat.title}</div>
+                            <div class="chat-type">${chat.type === 'group' ? 'Группа' : 'Канал'}</div>
+                        </div>
                     `;
                     chatElement.addEventListener('click', () => {
                         currentChat = chat;
@@ -353,26 +440,39 @@
             const membersListElement = document.getElementById('membersList');
             membersListElement.innerHTML = '';
             
-            // В реальном приложении нужно запрашивать список участников с сервера
-            mockMembers.forEach(member => {
+            currentChat.members.forEach(member => {
                 const memberElement = document.createElement('div');
                 memberElement.className = 'chat-item';
                 memberElement.innerHTML = `
-                    <div class="chat-title">${member.username || `ID: ${member.id}`}</div>
-                    <div class="chat-type">${member.is_admin ? 'Администратор' : 'Участник'}</div>
+                    <div>
+                        <div class="chat-title">${member.username || `ID: ${member.id}`}</div>
+                        <div class="chat-type">${member.is_admin ? 'Администратор' : 'Участник'}</div>
+                    </div>
                 `;
                 
                 if (!member.is_admin) {
+                    const actionButtons = document.createElement('div');
+                    actionButtons.className = 'action-buttons';
+                    
                     const kickBtn = document.createElement('button');
                     kickBtn.className = 'danger';
                     kickBtn.textContent = 'Исключить';
-                    kickBtn.style.marginTop = '5px';
-                    kickBtn.style.float = 'right';
                     kickBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         kickMember(member.id);
                     });
-                    memberElement.appendChild(kickBtn);
+                    
+                    const warnBtn = document.createElement('button');
+                    warnBtn.className = 'secondary';
+                    warnBtn.textContent = 'Предупредить';
+                    warnBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        warnMember(member.id);
+                    });
+                    
+                    actionButtons.appendChild(warnBtn);
+                    actionButtons.appendChild(kickBtn);
+                    memberElement.appendChild(actionButtons);
                 }
                 
                 membersListElement.appendChild(memberElement);
@@ -383,27 +483,26 @@
             const adminsListElement = document.getElementById('adminsList');
             adminsListElement.innerHTML = '';
             
-            // В реальном приложении нужно запрашивать список администраторов с сервера
-            mockMembers
+            currentChat.members
                 .filter(member => member.is_admin)
                 .forEach(member => {
                     const adminElement = document.createElement('div');
                     adminElement.className = 'chat-item';
                     adminElement.innerHTML = `
-                        <div class="chat-title">${member.username || `ID: ${member.id}`}</div>
+                        <div>
+                            <div class="chat-title">${member.username || `ID: ${member.id}`}</div>
+                        </div>
                     `;
                     
                     const demoteBtn = document.createElement('button');
                     demoteBtn.className = 'danger';
                     demoteBtn.textContent = 'Разжаловать';
-                    demoteBtn.style.marginTop = '5px';
-                    demoteBtn.style.float = 'right';
                     demoteBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         demoteAdmin(member.id);
                     });
-                    adminElement.appendChild(demoteBtn);
                     
+                    adminElement.appendChild(demoteBtn);
                     adminsListElement.appendChild(adminElement);
                 });
         }
@@ -412,37 +511,44 @@
             const invitesListElement = document.getElementById('invitesList');
             invitesListElement.innerHTML = '';
             
-            // В реальном приложении нужно запрашивать список ссылок с сервера
-            mockInvites.forEach(invite => {
-                const inviteElement = document.createElement('div');
-                inviteElement.className = 'chat-item';
-                
-                let usageText = '';
-                if (invite.usage_limit > 0) {
-                    usageText = ` (${invite.usage_count}/${invite.usage_limit} использований)`;
-                }
-                
-                inviteElement.innerHTML = `
-                    <div class="chat-title">${invite.link}</div>
-                    <div class="chat-type">Истекает: ${invite.expire_date}${usageText}</div>
-                `;
-                
-                const revokeBtn = document.createElement('button');
-                revokeBtn.className = 'danger';
-                revokeBtn.textContent = 'Отозвать';
-                revokeBtn.style.marginTop = '5px';
-                revokeBtn.style.float = 'right';
-                revokeBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    revokeInvite(invite.link);
+            if (currentChat.invites && currentChat.invites.length > 0) {
+                currentChat.invites.forEach(invite => {
+                    const inviteElement = document.createElement('div');
+                    inviteElement.className = 'chat-item';
+                    
+                    let usageText = '';
+                    if (invite.usage_limit > 0) {
+                        usageText = ` (${invite.usage_count}/${invite.usage_limit} использований)`;
+                    }
+                    
+                    inviteElement.innerHTML = `
+                        <div>
+                            <div class="chat-title">${invite.link}</div>
+                            <div class="chat-type">Истекает: ${invite.expire_date}${usageText}</div>
+                        </div>
+                    `;
+                    
+                    const revokeBtn = document.createElement('button');
+                    revokeBtn.className = 'danger';
+                    revokeBtn.textContent = 'Отозвать';
+                    revokeBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        revokeInvite(invite.link);
+                    });
+                    
+                    inviteElement.appendChild(revokeBtn);
+                    invitesListElement.appendChild(inviteElement);
                 });
-                inviteElement.appendChild(revokeBtn);
-                
-                invitesListElement.appendChild(inviteElement);
-            });
-            
-            if (invitesListElement.children.length === 0) {
+            } else {
                 invitesListElement.innerHTML = '<p>Нет активных пригласительных ссылок.</p>';
+            }
+        }
+        
+        function loadSettings() {
+            // В реальном приложении нужно загружать из localStorage
+            const savedSettings = localStorage.getItem('moderatorSettings');
+            if (savedSettings) {
+                appData.settings = JSON.parse(savedSettings);
             }
         }
         
@@ -454,17 +560,29 @@
                 return;
             }
             
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage(`Название чата изменено на "${newTitle}"`, 'success');
             currentChat.title = newTitle;
             setTimeout(showChatManagement, 1500);
+            
+            // Сохраняем изменения
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                appData.chats[chatIndex].title = newTitle;
+            }
         }
         
         function saveChatDescription() {
             const newDescription = document.getElementById('newDescription').value.trim();
             
-            // В реальном приложении нужно отправить запрос на сервер
             showStatusMessage('Описание чата успешно обновлено', 'success');
+            
+            // Сохраняем изменения
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                appData.chats[chatIndex].description = newDescription;
+            }
+            
             setTimeout(showChatManagement, 1500);
         }
         
@@ -475,16 +593,46 @@
                 return;
             }
             
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage(`Пользователь ${username} добавлен в чат`, 'success');
+            
+            // Добавляем в локальные данные
+            const newMember = {
+                id: Math.floor(Math.random() * 1000000000),
+                username: username,
+                is_admin: false
+            };
+            
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                if (!appData.chats[chatIndex].members) {
+                    appData.chats[chatIndex].members = [];
+                }
+                appData.chats[chatIndex].members.push(newMember);
+                currentChat.members = appData.chats[chatIndex].members;
+            }
+            
             document.getElementById('memberUsername').value = '';
             setTimeout(loadMembersList, 1500);
         }
         
         function kickMember(userId) {
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage('Пользователь исключен из чата', 'success');
+            
+            // Удаляем из локальных данных
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                appData.chats[chatIndex].members = appData.chats[chatIndex].members.filter(m => m.id !== userId);
+                currentChat.members = appData.chats[chatIndex].members;
+            }
+            
             setTimeout(loadMembersList, 1500);
+        }
+        
+        function warnMember(userId) {
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
+            showStatusMessage('Пользователь получил предупреждение', 'success');
         }
         
         function addAdmin() {
@@ -496,15 +644,48 @@
             
             const canEditGroup = document.getElementById('canEditGroup').checked;
             
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage(`Пользователь ${username} назначен администратором`, 'success');
+            
+            // Обновляем локальные данные
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                const memberIndex = appData.chats[chatIndex].members.findIndex(m => 
+                    m.username === username || m.id === parseInt(username.replace('@', '')));
+                
+                if (memberIndex !== -1) {
+                    appData.chats[chatIndex].members[memberIndex].is_admin = true;
+                    currentChat.members = appData.chats[chatIndex].members;
+                } else {
+                    // Если пользователь не найден, добавляем нового
+                    const newAdmin = {
+                        id: Math.floor(Math.random() * 1000000000),
+                        username: username,
+                        is_admin: true
+                    };
+                    appData.chats[chatIndex].members.push(newAdmin);
+                    currentChat.members = appData.chats[chatIndex].members;
+                }
+            }
+            
             document.getElementById('adminUsername').value = '';
             setTimeout(loadAdminsList, 1500);
         }
         
         function demoteAdmin(userId) {
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage('Администратор разжалован', 'success');
+            
+            // Обновляем локальные данные
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                const memberIndex = appData.chats[chatIndex].members.findIndex(m => m.id === userId);
+                if (memberIndex !== -1) {
+                    appData.chats[chatIndex].members[memberIndex].is_admin = false;
+                    currentChat.members = appData.chats[chatIndex].members;
+                }
+            }
+            
             setTimeout(loadAdminsList, 1500);
         }
         
@@ -520,8 +701,16 @@
                 promote_admins: document.getElementById('permPromoteAdmins').checked
             };
             
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage('Разрешения успешно обновлены', 'success');
+            
+            // Сохраняем изменения
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                appData.chats[chatIndex].permissions = permissions;
+                currentChat.permissions = permissions;
+            }
+            
             setTimeout(showChatManagement, 1500);
         }
         
@@ -529,15 +718,57 @@
             const expireDays = parseInt(document.getElementById('inviteExpire').value);
             const usageLimit = parseInt(document.getElementById('inviteUsage').value);
             
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
+            const newInvite = {
+                link: `https://t.me/joinchat/${Math.random().toString(36).substring(2, 10)}`,
+                expire_date: expireDays > 0 ? 
+                    new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : 
+                    "Никогда",
+                usage_limit: usageLimit,
+                usage_count: 0
+            };
+            
             showStatusMessage('Новая пригласительная ссылка создана', 'success');
+            
+            // Добавляем в локальные данные
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                if (!appData.chats[chatIndex].invites) {
+                    appData.chats[chatIndex].invites = [];
+                }
+                appData.chats[chatIndex].invites.push(newInvite);
+                currentChat.invites = appData.chats[chatIndex].invites;
+            }
+            
             setTimeout(loadInvitesList, 1500);
         }
         
         function revokeInvite(link) {
-            // В реальном приложении нужно отправить запрос на сервер
+            // В реальном приложении нужно отправить запрос через Telegram WebApp API
             showStatusMessage('Пригласительная ссылка отозвана', 'success');
+            
+            // Удаляем из локальных данных
+            const chatIndex = appData.chats.findIndex(c => c.id === currentChat.id);
+            if (chatIndex !== -1) {
+                appData.chats[chatIndex].invites = appData.chats[chatIndex].invites.filter(i => i.link !== link);
+                currentChat.invites = appData.chats[chatIndex].invites;
+            }
+            
             setTimeout(loadInvitesList, 1500);
+        }
+        
+        function saveSettings() {
+            const newSettings = {
+                autoDeleteSpam: document.getElementById('autoDeleteSpam').value === "1",
+                warnBeforeBan: parseInt(document.getElementById('warnBeforeBan').value),
+                language: document.getElementById('language').value
+            };
+            
+            appData.settings = newSettings;
+            localStorage.setItem('moderatorSettings', JSON.stringify(newSettings));
+            
+            showStatusMessage('Настройки сохранены', 'success');
+            setTimeout(showMainMenu, 1500);
         }
         
         // Вспомогательные функции
@@ -552,6 +783,19 @@
                 statusElement.style.display = 'none';
             }, 5000);
         }
+        
+        // Обработка данных из Telegram
+        if (tg.initData) {
+            // Можно использовать данные инициализации для авторизации
+            console.log('Init data:', tg.initData);
+            console.log('User:', tg.initDataUnsafe.user);
+            console.log('Chat:', tg.initDataUnsafe.chat);
+        }
+        
+        // Обработчик закрытия приложения
+        tg.onEvent('viewportChanged', () => {
+            tg.expand();
+        });
     </script>
 </body>
-  </html>
+</html>
