@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Модератор чатов Telegram</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #006699;
+        }
+        button.secondary {
+            background-color: #6c757d;
+        }
+        button.secondary:hover {
+            background-color: #5a6268;
+        }
+        button.danger {
+            background-color: #dc3545;
+        }
+        button.danger:hover {
+            background-color: #bd2130;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .chat-list {
+            text-align: left;
+            margin-top: 20px;
+        }
+        .chat-item {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .chat-item:hover {
+            background-color: #f8f9fa;
+        }
+        .chat-title {
+            font-weight: bold;
+        }
+        .chat-type {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        .settings-form {
+            text-align: left;
+            margin-top: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .permissions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .permission-item {
+            display: flex;
+            align-items: center;
+        }
+        .permission-item input {
+            width: auto;
+            margin-right: 10px;
+        }
+        .back-btn {
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Главное меню -->
+        <div id="mainMenu">
+            <h1>Модератор чатов Telegram</h1>
+            <div class="menu">
+                <button id="addBotBtn">Добавить бота</button>
+                <button id="manageBtn">Управление</button>
+            </div>
+            <div id="statusMessage" class="status"></div>
+        </div>
+
+        <!-- Меню добавления бота -->
+        <div id="addBotMenu" class="hidden">
+            <button class="back-btn secondary" onclick="showMainMenu()">← Назад</button>
+            <h2>Добавить бота</h2>
+            <div class="menu">
+                <button id="addToGroupBtn">Добавить в группу</button>
+                <button id="addToChannelBtn">Добавить в канал</button>
+            </div>
+        </div>
+
+        <!-- Список чатов для управления -->
+        <div id="manageMenu" class="hidden">
+            <button class="back-btn secondary" onclick="showMainMenu()">← Назад</button>
+            <h2>Ваши чаты и каналы</h2>
+            <p>Выберите чат для управления:</p>
+            <div id="chatList" class="chat-list">
+                <!-- Список чатов будет загружен здесь -->
+            </div>
+        </div>
+
+        <!-- Меню управления конкретным чатом -->
+        <div id="chatManagement" class="hidden">
+            <button class="back-btn secondary" onclick="showManageMenu()">← Назад</button>
+            <h2 id="currentChatTitle">Управление чатом</h2>
+            <div class="menu">
+                <button id="editTitleBtn">Изменить название</button>
+                <button id="editDescriptionBtn">Изменить описание</button>
+                <button id="manageMembersBtn">Управление участниками</button>
+                <button id="manageAdminsBtn">Управление администраторами</button>
+                <button id="managePermissionsBtn">Настройки разрешений</button>
+                <button id="manageInvitesBtn">Пригласительные ссылки</button>
+            </div>
+        </div>
+
+        <!-- Форма изменения названия -->
+        <div id="editTitleForm" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showChatManagement()">← Назад</button>
+            <h2>Изменить название</h2>
+            <div class="form-group">
+                <label for="newTitle">Новое название:</label>
+                <input type="text" id="newTitle" placeholder="Введите новое название">
+            </div>
+            <button id="saveTitleBtn">Сохранить</button>
+        </div>
+
+        <!-- Форма изменения описания -->
+        <div id="editDescriptionForm" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showChatManagement()">← Назад</button>
+            <h2>Изменить описание</h2>
+            <div class="form-group">
+                <label for="newDescription">Новое описание:</label>
+                <textarea id="newDescription" rows="4" placeholder="Введите новое описание"></textarea>
+            </div>
+            <button id="saveDescriptionBtn">Сохранить</button>
+        </div>
+
+        <!-- Управление участниками -->
+        <div id="manageMembersForm" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showChatManagement()">← Назад</button>
+            <h2>Управление участниками</h2>
+            <div class="form-group">
+                <label for="memberUsername">Добавить участника:</label>
+                <input type="text" id="memberUsername" placeholder="@username">
+                <button id="addMemberBtn" style="margin-top: 10px;">Добавить</button>
+            </div>
+            <div class="form-group">
+                <label>Список участников:</label>
+                <div id="membersList" class="chat-list">
+                    <!-- Список участников будет загружен здесь -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Управление администраторами -->
+        <div id="manageAdminsForm" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showChatManagement()">← Назад</button>
+            <h2>Управление администраторами</h2>
+            <div class="form-group">
+                <label for="adminUsername">Назначить администратора:</label>
+                <input type="text" id="adminUsername" placeholder="@username">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="canEditGroup"> Может изменять группу
+                    </label>
+                </div>
+                <button id="addAdminBtn" style="margin-top: 10px;">Назначить</button>
+            </div>
+            <div class="form-group">
+                <label>Список администраторов:</label>
+                <div id="adminsList" class="chat-list">
+                    <!-- Список администраторов будет загружен здесь -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Управление разрешениями -->
+        <div id="managePermissionsForm" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showChatManagement()">← Назад</button>
+            <h2>Настройки разрешений</h2>
+            <div class="permissions-grid">
+                <div class="permission-item">
+                    <input type="checkbox" id="permChangeInfo" checked>
+                    <label for="permChangeInfo">Изменять информацию</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permPostMessages" checked>
+                    <label for="permPostMessages">Отправлять сообщения</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permEditMessages" checked>
+                    <label for="permEditMessages">Редактировать сообщения</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permDeleteMessages" checked>
+                    <label for="permDeleteMessages">Удалять сообщения</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permInviteUsers" checked>
+                    <label for="permInviteUsers">Приглашать пользователей</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permRestrictMembers" checked>
+                    <label for="permRestrictMembers">Ограничивать участников</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permPinMessages" checked>
+                    <label for="permPinMessages">Закреплять сообщения</label>
+                </div>
+                <div class="permission-item">
+                    <input type="checkbox" id="permPromoteAdmins" checked>
+                    <label for="permPromoteAdmins">Назначать администраторов</label>
+                </div>
+            </div>
+            <button id="savePermissionsBtn" style="margin-top: 20px;">Сохранить разрешения</button>
+        </div>
+
+        <!-- Управление пригласительными ссылками -->
+        <div id="manageInvitesForm" class="hidden settings-form">
+            <button class="back-btn secondary" onclick="showChatManagement()">← Назад</button>
+            <h2>Пригласительные ссылки</h2>
+            <div class="form-group">
+                <label>Текущие ссылки:</label>
+                <div id="invitesList" class="chat-list">
+                    <!-- Список ссылок будет загружен здесь -->
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="inviteExpire">Срок действия (дни):</label>
+                <select id="inviteExpire">
+                    <option value="1">1 день</option>
+                    <option value="7">7 дней</option>
+                    <option value="30" selected>30 дней</option>
+                    <option value="0">Без ограничения</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="inviteUsage">Лимит использований:</label>
+                <select id="inviteUsage">
+                    <option value="1">1 использование</option>
+                    <option value="5">5 использований</option>
+                    <option value="10">10 использований</option>
+                    <option value="0" selected>Без ограничения</option>
+                </select>
+            </div>
+            <button id="createInviteBtn">Создать новую ссылку</button>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // ID вашего бота (замените на реальный)
+        const BOT_USERNAME = 'your_moderator_bot';
+        
+        // Текущий выбранный чат
+        let currentChat = null;
+        
+        // Заглушка для данных (в реальном приложении нужно получать с сервера)
+        const mockChats = [
+            { id: -100123456789, title: "Моя тестовая группа", type: "group", is_admin: true },
+            { id: -100987654321, title: "Мой тестовый канал", type: "channel", is_admin: true }
+        ];
+        
+        const mockMembers = [
+            { id: 123456789, username: "user1", is_admin: false },
+            { id: 987654321, username: "user2", is_admin: true }
+        ];
+        
+        const mockInvites = [
+            { link: "https://t.me/joinchat/ABC123", expire_date: "2023-12-31", usage_limit: 10, usage_count: 3 }
+        ];
+        
+        // Инициализация элементов
+        document.addEventListener('DOMContentLoaded', function() {
+            // Главное меню
+            document.getElementById('addBotBtn').addEventListener('click', showAddBotMenu);
+            document.getElementById('manageBtn').addEventListener('click', showManageMenu);
+            
+            // Меню добавления бота
+            document.getElementById('addToGroupBtn').addEventListener('click', () => addBotToChat('group'));
+            document.getElementById('addToChannelBtn').addEventListener('click', () => addBotToChat('channel'));
+            
+            // Управление чатом
+            document.getElementById('editTitleBtn').addEventListener('click', showEditTitleForm);
+            document.getElementById('editDescriptionBtn').addEventListener('click', showEditDescriptionForm);
+            document.getElementById('manageMembersBtn').addEventListener('click', showManageMembersForm);
+            document.getElementById('manageAdminsBtn').addEventListener('click', showManageAdminsForm);
+            document.getElementById('managePermissionsBtn').addEventListener('click', showManagePermissionsForm);
+            document.getElementById('manageInvitesBtn').addEventListener('click', showManageInvitesForm);
+            
+            // Формы
+            document.getElementById('saveTitleBtn').addEventListener('click', saveChatTitle);
+            document.getElementById('saveDescriptionBtn').addEventListener('click', saveChatDescription);
+            document.getElementById('addMemberBtn').addEventListener('click', addMember);
+            document.getElementById('addAdminBtn').addEventListener('click', addAdmin);
+            document.getElementById('savePermissionsBtn').addEventListener('click', savePermissions);
+            document.getElementById('createInviteBtn').addEventListener('click', createInvite);
+        });
+        
+        // Функции навигации
+        function showMainMenu() {
+            hideAllSections();
+            document.getElementById('mainMenu').classList.remove('hidden');
+        }
+        
+        function showAddBotMenu() {
+            hideAllSections();
+            document.getElementById('addBotMenu').classList.remove('hidden');
+        }
+        
+        function showManageMenu() {
+            hideAllSections();
+            document.getElementById('manageMenu').classList.remove('hidden');
+            loadChatList();
+        }
+        
+        function showChatManagement() {
+            hideAllSections();
+            document.getElementById('chatManagement').classList.remove('hidden');
+            document.getElementById('currentChatTitle').textContent = `Управление: ${currentChat.title}`;
+        }
+        
+        function showEditTitleForm() {
+            hideAllSections();
+            document.getElementById('editTitleForm').classList.remove('hidden');
+            document.getElementById('newTitle').value = currentChat.title;
+        }
+        
+        function showEditDescriptionForm() {
+            hideAllSections();
+            document.getElementById('editDescriptionForm').classList.remove('hidden');
+            // В реальном приложении нужно загрузить текущее описание
+            document.getElementById('newDescription').value = "Текущее описание чата";
+        }
+        
+        function showManageMembersForm() {
+            hideAllSections();
+            document.getElementById('manageMembersForm').classList.remove('hidden');
+            loadMembersList();
+        }
+        
+        function showManageAdminsForm() {
+            hideAllSections();
+            document.getElementById('manageAdminsForm').classList.remove('hidden');
+            loadAdminsList();
+        }
+        
+        function showManagePermissionsForm() {
+            hideAllSections();
+            document.getElementById('managePermissionsForm').classList.remove('hidden');
+        }
+        
+        function showManageInvitesForm() {
+            hideAllSections();
+            document.getElementById('manageInvitesForm').classList.remove('hidden');
+            loadInvitesList();
+        }
+        
+        function hideAllSections() {
+            const sections = document.querySelectorAll('.container > div');
+            sections.forEach(section => {
+                if (!section.classList.contains('hidden')) {
+                    section.classList.add('hidden');
+                }
+            });
+        }
+        
+        // Функции работы с чатами
+        function addBotToChat(chatType) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.style.display = 'none';
+            
+            if (tg.platform !== 'unknown') {
+                tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?startgroup=true`);
+                
+                showStatusMessage(`Бот был предложен для добавления в ${chatType === 'group' ? 'группу' : 'канал'}. Пожалуйста, завершите добавление в интерфейсе Telegram.`, 'success');
+            } else {
+                showStatusMessage('Это приложение должно быть открыто в Telegram для работы этой функции.', 'error');
+                window.open(`https://t.me/${BOT_USERNAME}?startgroup=true`, '_blank');
+            }
+        }
+        
+        function loadChatList() {
+            const chatListElement = document.getElementById('chatList');
+            chatListElement.innerHTML = '';
+            
+            // В реальном приложении нужно запрашивать список чатов с сервера
+            mockChats.forEach(chat => {
+                if (chat.is_admin) {
+                    const chatElement = document.createElement('div');
+                    chatElement.className = 'chat-item';
+                    chatElement.innerHTML = `
+                        <div class="chat-title">${chat.title}</div>
+                        <div class="chat-type">${chat.type === 'group' ? 'Группа' : 'Канал'}</div>
+                    `;
+                    chatElement.addEventListener('click', () => {
+                        currentChat = chat;
+                        showChatManagement();
+                    });
+                    chatListElement.appendChild(chatElement);
+                }
+            });
+            
+            if (chatListElement.children.length === 0) {
+                chatListElement.innerHTML = '<p>У вас нет чатов или каналов, где вы являетесь администратором.</p>';
+            }
+        }
+        
+        function loadMembersList() {
+            const membersListElement = document.getElementById('membersList');
+            membersListElement.innerHTML = '';
+            
+            // В реальном приложении нужно запрашивать список участников с сервера
+            mockMembers.forEach(member => {
+                const memberElement = document.createElement('div');
+                memberElement.className = 'chat-item';
+                memberElement.innerHTML = `
+                    <div class="chat-title">${member.username || `ID: ${member.id}`}</div>
+                    <div class="chat-type">${member.is_admin ? 'Администратор' : 'Участник'}</div>
+                `;
+                
+                if (!member.is_admin) {
+                    const kickBtn = document.createElement('button');
+                    kickBtn.className = 'danger';
+                    kickBtn.textContent = 'Исключить';
+                    kickBtn.style.marginTop = '5px';
+                    kickBtn.style.float = 'right';
+                    kickBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        kickMember(member.id);
+                    });
+                    memberElement.appendChild(kickBtn);
+                }
+                
+                membersListElement.appendChild(memberElement);
+            });
+        }
+        
+        function loadAdminsList() {
+            const adminsListElement = document.getElementById('adminsList');
+            adminsListElement.innerHTML = '';
+            
+            // В реальном приложении нужно запрашивать список администраторов с сервера
+            mockMembers
+                .filter(member => member.is_admin)
+                .forEach(member => {
+                    const adminElement = document.createElement('div');
+                    adminElement.className = 'chat-item';
+                    adminElement.innerHTML = `
+                        <div class="chat-title">${member.username || `ID: ${member.id}`}</div>
+                    `;
+                    
+                    const demoteBtn = document.createElement('button');
+                    demoteBtn.className = 'danger';
+                    demoteBtn.textContent = 'Разжаловать';
+                    demoteBtn.style.marginTop = '5px';
+                    demoteBtn.style.float = 'right';
+                    demoteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        demoteAdmin(member.id);
+                    });
+                    adminElement.appendChild(demoteBtn);
+                    
+                    adminsListElement.appendChild(adminElement);
+                });
+        }
+        
+        function loadInvitesList() {
+            const invitesListElement = document.getElementById('invitesList');
+            invitesListElement.innerHTML = '';
+            
+            // В реальном приложении нужно запрашивать список ссылок с сервера
+            mockInvites.forEach(invite => {
+                const inviteElement = document.createElement('div');
+                inviteElement.className = 'chat-item';
+                
+                let usageText = '';
+                if (invite.usage_limit > 0) {
+                    usageText = ` (${invite.usage_count}/${invite.usage_limit} использований)`;
+                }
+                
+                inviteElement.innerHTML = `
+                    <div class="chat-title">${invite.link}</div>
+                    <div class="chat-type">Истекает: ${invite.expire_date}${usageText}</div>
+                `;
+                
+                const revokeBtn = document.createElement('button');
+                revokeBtn.className = 'danger';
+                revokeBtn.textContent = 'Отозвать';
+                revokeBtn.style.marginTop = '5px';
+                revokeBtn.style.float = 'right';
+                revokeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    revokeInvite(invite.link);
+                });
+                inviteElement.appendChild(revokeBtn);
+                
+                invitesListElement.appendChild(inviteElement);
+            });
+            
+            if (invitesListElement.children.length === 0) {
+                invitesListElement.innerHTML = '<p>Нет активных пригласительных ссылок.</p>';
+            }
+        }
+        
+        // Функции управления чатом
+        function saveChatTitle() {
+            const newTitle = document.getElementById('newTitle').value.trim();
+            if (!newTitle) {
+                showStatusMessage('Введите новое название', 'error');
+                return;
+            }
+            
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage(`Название чата изменено на "${newTitle}"`, 'success');
+            currentChat.title = newTitle;
+            setTimeout(showChatManagement, 1500);
+        }
+        
+        function saveChatDescription() {
+            const newDescription = document.getElementById('newDescription').value.trim();
+            
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage('Описание чата успешно обновлено', 'success');
+            setTimeout(showChatManagement, 1500);
+        }
+        
+        function addMember() {
+            const username = document.getElementById('memberUsername').value.trim();
+            if (!username) {
+                showStatusMessage('Введите username пользователя', 'error');
+                return;
+            }
+            
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage(`Пользователь ${username} добавлен в чат`, 'success');
+            document.getElementById('memberUsername').value = '';
+            setTimeout(loadMembersList, 1500);
+        }
+        
+        function kickMember(userId) {
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage('Пользователь исключен из чата', 'success');
+            setTimeout(loadMembersList, 1500);
+        }
+        
+        function addAdmin() {
+            const username = document.getElementById('adminUsername').value.trim();
+            if (!username) {
+                showStatusMessage('Введите username пользователя', 'error');
+                return;
+            }
+            
+            const canEditGroup = document.getElementById('canEditGroup').checked;
+            
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage(`Пользователь ${username} назначен администратором`, 'success');
+            document.getElementById('adminUsername').value = '';
+            setTimeout(loadAdminsList, 1500);
+        }
+        
+        function demoteAdmin(userId) {
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage('Администратор разжалован', 'success');
+            setTimeout(loadAdminsList, 1500);
+        }
+        
+        function savePermissions() {
+            const permissions = {
+                change_info: document.getElementById('permChangeInfo').checked,
+                post_messages: document.getElementById('permPostMessages').checked,
+                edit_messages: document.getElementById('permEditMessages').checked,
+                delete_messages: document.getElementById('permDeleteMessages').checked,
+                invite_users: document.getElementById('permInviteUsers').checked,
+                restrict_members: document.getElementById('permRestrictMembers').checked,
+                pin_messages: document.getElementById('permPinMessages').checked,
+                promote_admins: document.getElementById('permPromoteAdmins').checked
+            };
+            
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage('Разрешения успешно обновлены', 'success');
+            setTimeout(showChatManagement, 1500);
+        }
+        
+        function createInvite() {
+            const expireDays = parseInt(document.getElementById('inviteExpire').value);
+            const usageLimit = parseInt(document.getElementById('inviteUsage').value);
+            
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage('Новая пригласительная ссылка создана', 'success');
+            setTimeout(loadInvitesList, 1500);
+        }
+        
+        function revokeInvite(link) {
+            // В реальном приложении нужно отправить запрос на сервер
+            showStatusMessage('Пригласительная ссылка отозвана', 'success');
+            setTimeout(loadInvitesList, 1500);
+        }
+        
+        // Вспомогательные функции
+        function showStatusMessage(message, type) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+            statusElement.style.display = 'block';
+            
+            // Автоматически скрываем сообщение через 5 секунд
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+  </html>
